@@ -420,10 +420,17 @@ def plot_market_data(results):
         print("プロット可能なデータがありません")
         return
 
+    # BTCUSDを最初に、残りのデータを順番に並べる
+    ordered_results = {}
+    if 'btcusd' in valid_results:
+        ordered_results['btcusd'] = valid_results['btcusd']
+    ordered_results.update({k: v for k, v in valid_results.items() if k != 'btcusd'})
+    valid_results = ordered_results
+
     # グラフスタイルの設定
     plt.style.use('seaborn-v0_8-darkgrid')
     plt.rcParams.update({
-        'figure.figsize': (15, 4*len(valid_results)),
+        'figure.figsize': (20, 16),  # 図のサイズを大きくする
         'font.size': 10,
         'axes.titlesize': 12,
         'axes.labelsize': 10
@@ -441,9 +448,9 @@ def plot_market_data(results):
         'hash_rate': '#e67e22'           # オレンジ濃い
     }
     
-    fig, axs = plt.subplots(len(valid_results), 1)
-    if len(valid_results) == 1:
-        axs = [axs]
+    # 2列4行のサブプロットを作成
+    fig, axs = plt.subplots(4, 2)
+    axs = axs.flatten()  # 2次元配列を1次元に変換
     
     for i, (name, df) in enumerate(valid_results.items()):
         title = name.replace('_', ' ').title()
@@ -493,13 +500,25 @@ def plot_market_data(results):
             axs[i].set_ylim(0, 100)
         elif name == 'large_holders':
             axs[i].set_ylabel('Total BTC Holdings')
-            axs[i].set_ylim(bottom=0)
+            # Large Holdersの表示範囲を調整
+            min_val = df['Total Holdings'].min()
+            max_val = df['Total Holdings'].max()
+            margin = (max_val - min_val) * 0.1  # 10%のマージン
+            axs[i].set_ylim(min_val - margin, max_val + margin)
+            # Y軸のフォーマットを設定（千単位でカンマ区切り）
+            axs[i].yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: format(int(x), ',')))
         elif name == 'btcusd':
             axs[i].set_ylabel('Price (USD)')
             axs[i].set_ylim(bottom=0)
         elif name == 'open_interest':
             axs[i].set_ylabel('Open Interest (BTC)')
-            axs[i].set_ylim(bottom=0)
+            # Open Interestの表示範囲を調整
+            min_val = df['Open Interest'].min()
+            max_val = df['Open Interest'].max()
+            margin = (max_val - min_val) * 0.1  # 10%のマージン
+            axs[i].set_ylim(min_val - margin, max_val + margin)
+            # Y軸のフォーマットを設定（千単位でカンマ区切り）
+            axs[i].yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: format(int(x), ',')))
         elif name == 'trading_volume':
             axs[i].set_ylabel('Volume (USD)')
             axs[i].set_ylim(bottom=0)
@@ -518,6 +537,10 @@ def plot_market_data(results):
         
         # x軸の日付フォーマットを設定
         axs[i].tick_params(axis='x', rotation=45)
+    
+    # 余分なサブプロットを非表示にする
+    for i in range(len(valid_results), len(axs)):
+        axs[i].set_visible(False)
             
     plt.tight_layout()
     plt.savefig('crypto_analysis.png', dpi=300, bbox_inches='tight', facecolor='white')
