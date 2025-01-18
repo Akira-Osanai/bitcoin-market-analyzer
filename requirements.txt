@@ -1,4 +1,5 @@
 requests==2.31.0
 matplotlib==3.8.2
 pandas==2.1.4
-yfinance==0.2.35 
+yfinance==0.2.35
+seaborn==0.13.2 
