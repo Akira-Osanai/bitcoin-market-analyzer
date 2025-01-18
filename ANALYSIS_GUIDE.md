@@ -98,3 +98,35 @@
    - マクロ経済環境との整合性
    - 規制環境の変化への注意
    - 主要なイベントのスケジュール管理
+
+## 7. プロットモジュールの使用方法
+
+### 7.1 基本的な使用方法
+```python
+from util.plot_market_data import plot_market_data
+
+# データ収集
+collector = DataCollector()
+results = collector.collect_all_data()
+
+# プロット生成
+plot_market_data(results)
+```
+
+### 7.2 カスタマイズ
+- **カラーパレット**: `base_plotter.py`の`colors`辞書で各指標の色を設定可能
+- **グラフレイアウト**: `base_plotter.py`の`create_grid`メソッドでレイアウトをカスタマイズ可能
+- **テクニカル指標**: `technical_indicators.py`で各指標のパラメータを調整可能
+
+### 7.3 プロット構成
+1. **メインチャート**: BTCUSDの価格と移動平均線
+2. **サブチャート**: RSIとMACDの技術指標
+3. **相関チャート**: DXY、S&P500、Goldとの相関
+4. **その他の指標**: オンチェーン指標、センチメント指標、ETFデータ
+
+### 7.4 データの更新頻度
+- 価格データ: リアルタイム（APIの制限内）
+- オンチェーンデータ: 日次
+- センチメントデータ: 日次
+- 相関データ: 30日ローリング
+- ETFデータ: 取引時間内

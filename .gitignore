@@ -1,6 +1,3 @@
-# Data files
-*.csv
-
 # Python
 __pycache__/
 *.py[cod]
@@ -23,9 +20,14 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
+# 仮想環境
 venv/
 ENV/
+
+# データファイル
+market_data/
+*.csv
+*.png
 
 # IDE
 .idea/
@@ -33,22 +35,6 @@ ENV/
 *.swp
 *.swo
 
-# Cursor
-.cursorrules
-
 # OS
 .DS_Store
-Thumbs.db
-
-# Project specific
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.pdf
-*.log
-
-# Environment
-.env
-.env.local
-.env.*.local 
+Thumbs.db 

@@ -89,3 +89,46 @@ python crypto_analysis.py
 ## ライセンス
 
 MIT License
+
+## プロジェクト構造
+
+```
+bitcoin-market-analyzer/
+├── crypto_analysis.py      # メインスクリプト
+├── requirements.txt        # 依存パッケージ
+├── README.md              # プロジェクト説明
+├── ANALYSIS_GUIDE.md      # 分析ガイド
+└── util/
+    ├── data_collector.py   # データ収集メインクラス
+    ├── plot_market_data.py # プロット機能のエントリーポイント
+    ├── collectors/        # データ収集モジュール
+    │   ├── base_collector.py
+    │   ├── market_data.py
+    │   ├── onchain_data.py
+    │   ├── derivative_data.py
+    │   ├── sentiment_data.py
+    │   ├── exchange_data.py
+    │   └── etf_data.py
+    └── plotters/          # プロット機能モジュール
+        ├── base_plotter.py
+        ├── technical_indicators.py
+        ├── correlation_plotter.py
+        └── market_plotter.py
+```
+
+### モジュール説明
+
+#### データ収集モジュール
+- `base_collector.py`: 基本的なデータ収集機能
+- `market_data.py`: 価格データの収集（BTCUSD、DXY、S&P500、Gold）
+- `onchain_data.py`: オンチェーンデータの収集
+- `derivative_data.py`: デリバティブデータの収集
+- `sentiment_data.py`: センチメントデータの収集
+- `exchange_data.py`: 取引所データの収集
+- `etf_data.py`: ETFデータの収集
+
+#### プロットモジュール
+- `base_plotter.py`: 基本的なプロット設定
+- `technical_indicators.py`: テクニカル指標の計算
+- `correlation_plotter.py`: 相関分析のプロット
+- `market_plotter.py`: メインのプロット機能
