@@ -1,0 +1,68 @@
+# 実装予定の指標
+# 各指標にデータソースとAPIエンドポイントを記載
+
+indicators:
+  price:
+    - name: BTCUSD
+      source: Yahoo Finance
+      timeframe: 1d
+      moving_averages:
+        - type: SMA
+          periods: [21, 50, 200]
+        - type: EMA
+          periods: [21, 50, 200]
+      oscillators:
+        - type: RSI
+          period: 14
+        - type: MACD
+          settings:
+            fast_period: 12
+            slow_period: 26
+            signal_period: 9
+
+  correlation:
+    - name: DXY
+      source: Yahoo Finance
+      symbol: DX-Y.NYB
+      correlation_window: 30
+      timeframe: 1d
+
+  onchain:
+    - name: Large Holders
+      source: bitcoin-data.com
+      threshold: 10000  # BTC
+      timeframe: 1d
+    
+    - name: Active Addresses
+      source: blockchain.info
+      timeframe: 1d
+    
+    - name: Hash Rate
+      source: blockchain.info
+      timeframe: 1d
+
+  market:
+    - name: Funding Rate
+      source: Binance
+      symbol: BTCUSDT
+      timeframe: 8h
+    
+    - name: Fear & Greed Index
+      source: alternative.me
+      timeframe: 1d
+    
+    - name: Open Interest
+      source: Binance
+      symbol: BTCUSDT
+      timeframe: 1d
+    
+    - name: Trading Volume
+      source: Yahoo Finance
+      symbol: BTC-USD
+      timeframe: 1d
+
+settings:
+  data_directory: market_data
+  graph_output: crypto_analysis.png
+  history_period: 365  # days
+  update_interval: 1   # days 
