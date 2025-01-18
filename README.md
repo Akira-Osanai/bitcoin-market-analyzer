@@ -47,8 +47,8 @@
 
 1. リポジトリのクローン:
 ```bash
-git clone https://github.com/Akira-Osanai/bitcoin-addr-10k-BTC.git
-cd bitcoin-addr-10k-BTC
+git clone https://github.com/Akira-Osanai/bitcoin-market-analyzer.git
+cd bitcoin-market-analyzer
 ```
 
 2. 仮想環境の作成と有効化:
