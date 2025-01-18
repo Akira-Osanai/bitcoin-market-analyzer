@@ -3,6 +3,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import matplotlib.gridspec as gridspec
+from matplotlib.patches import Rectangle
 
 class BasePlotter:
     def __init__(self):
@@ -36,6 +37,15 @@ class BasePlotter:
                 'BTC': '#2ecc71',      # 緑
                 'crypto': '#e74c3c'    # 赤
             }
+        }
+
+        # シグナル強度の背景色を設定
+        self.signal_colors = {
+            'strong_buy': '#27ae60cc',    # 濃い緑（アルファ値0.8）
+            'buy': '#2ecc71aa',           # 薄い緑（アルファ値0.67）
+            'neutral': '#bdc3c766',        # グレー（アルファ値0.4）
+            'sell': '#e74d3caa',          # 薄い赤（アルファ値0.67）
+            'strong_sell': '#c0392bcc'    # 濃い赤（アルファ値0.8）
         }
 
     def setup_plot_style(self):
@@ -76,6 +86,40 @@ class BasePlotter:
             ax.set_ylabel(ylabel)
         ax.tick_params(axis='x', rotation=45)
         ax.grid(True, alpha=0.3)
+
+    def add_signal_background(self, ax, signal_data):
+        """シグナル強度に応じた背景色を追加
+        
+        Args:
+            ax: プロット対象のAxes
+            signal_data (pd.Series): シグナル強度データ（-2: 強い売り、-1: 売り、0: 中立、1: 買い、2: 強い買い）
+        """
+        if signal_data is None or len(signal_data) == 0:
+            return
+
+        # シグナル値と背景色のマッピング
+        signal_map = {
+            2: self.signal_colors['strong_buy'],
+            1: self.signal_colors['buy'],
+            0: self.signal_colors['neutral'],
+            -1: self.signal_colors['sell'],
+            -2: self.signal_colors['strong_sell']
+        }
+
+        # 各日付でのシグナルに応じて背景色を設定
+        for i in range(len(signal_data) - 1):
+            signal = signal_data.iloc[i]
+            start = signal_data.index[i]
+            end = signal_data.index[i + 1]
+            
+            # シグナル値が有効な場合のみ背景色を追加
+            if signal in signal_map:
+                rect = Rectangle((start, ax.get_ylim()[0]),
+                               end - start,
+                               ax.get_ylim()[1] - ax.get_ylim()[0],
+                               facecolor=signal_map[signal],
+                               zorder=0)
+                ax.add_patch(rect)
 
     def save_plot(self, fig, filename='crypto_analysis.png'):
         """プロットを保存"""

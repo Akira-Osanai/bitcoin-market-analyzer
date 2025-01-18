@@ -11,6 +11,7 @@
 - 相関分析（DXY、S&P500、Gold）
 - ETFフロー分析
 - グラフの自動生成と保存
+- 5段階市場シグナル表示（背景色による直感的な判断支援）
 
 ## 収集する指標
 
@@ -38,11 +39,39 @@
 - ETFフロー（GBTC、BITO）
 - Googleトレンド（bitcoin、BTC、crypto）
 
+## 市場シグナル
+
+価格チャートの背景色で市場シグナルを5段階で表示します：
+
+- 濃い緑色：強い買いシグナル
+- 薄い緑色：買いシグナル
+- グレー：中立
+- 薄い赤色：売りシグナル
+- 濃い赤色：強い売りシグナル
+
+シグナルは以下の指標を組み合わせて算出されます：
+
+1. RSI（重み：1.0）
+   - 30以下：買い
+   - 70以上：売り
+
+2. MACD（重み：1.5）
+   - ゴールデンクロス：買い
+   - デッドクロス：売り
+
+3. 移動平均（重み：2.0）
+   - 200日MAの上：買い
+   - 200日MAの下：売り
+
+4. Fear & Greedインデックス（重み：0.5）
+   - 25以下：買い
+   - 75以上：売り
+
 ## セットアップ
 
 1. リポジトリのクローン:
 ```bash
-git clone https://github.com/yourusername/bitcoin-market-analyzer.git
+git clone https://github.com/Akira-Osanai/bitcoin-market-analyzer.git
 cd bitcoin-market-analyzer
 ```
 
