@@ -8,6 +8,8 @@ import time
 import os
 import seaborn as sns
 import matplotlib.gridspec as gridspec
+import pandas_market_calendars as mcal
+from pytrends.request import TrendReq
 
 class DataCollector:
     def __init__(self):
@@ -17,6 +19,10 @@ class DataCollector:
         # 1年間のデータ取得用の日付設定
         self.end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         self.start_date = (self.end_date - relativedelta(years=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        # NYSE（ニューヨーク証券取引所）のカレンダーを取得
+        self.nyse = mcal.get_calendar('NYSE')
+        # PyTrendsの初期化
+        self.pytrends = TrendReq(hl='en-US', tz=360)
         print(f"データ収集期間: {self.start_date} から {self.end_date}")
 
     def load_existing_data(self, filename):
@@ -397,10 +403,14 @@ class DataCollector:
         try:
             new_data = []
             for start, end in missing_ranges:
+                # 土日または祝日をスキップ
+                if start.weekday() >= 5 or end.weekday() >= 5 or not self.is_market_open(start) or not self.is_market_open(end):
+                    print(f"✓ {start} から {end} は休場日のためスキップします")
+                    continue
+                    
                 print(f"データ取得期間: {start} から {end}")
                 ticker = "DX-Y.NYB"
                 try:
-                    # end_dateに1日を加算して終了日を含める
                     df = yf.download(ticker, start=start, end=end + relativedelta(days=1))
                     if not df.empty:
                         df_close = df[['Close']].copy()
@@ -409,8 +419,10 @@ class DataCollector:
                     else:
                         print(f"✓ {start} から {end} の期間にデータがないためスキップします")
                 except Exception as e:
-                    print(f"✓ {start} から {end} の期間のデータ取得をスキップ: {str(e)}")
-                time.sleep(1)  # API制限を考慮
+                    if "No price data found" in str(e):
+                        print(f"✓ {start} から {end} の期間は取引なしのためスキップします")
+                    else:
+                        print(f"✓ {start} から {end} の期間のデータ取得をスキップ: {str(e)}")
             
             if new_data:
                 new_df = pd.concat(new_data)
@@ -437,6 +449,287 @@ class DataCollector:
             print(f"✗ DXYデータの取得に失敗: {str(e)}")
             return existing_df if existing_df is not None else None
 
+    def get_sp500_data(self):
+        """Yahoo FinanceからS&P500データを取得"""
+        print("\nS&P500データの取得を開始...")
+        
+        # 既存のデータを読み込む
+        existing_df = self.load_existing_data('sp500.csv')
+        if existing_df is not None:
+            print(f"既存データ: {len(existing_df)}行")
+            missing_ranges = self.get_missing_date_ranges(existing_df)
+        else:
+            missing_ranges = [(self.start_date, self.end_date)]
+        
+        try:
+            new_data = []
+            for start, end in missing_ranges:
+                # 土日または祝日をスキップ
+                if start.weekday() >= 5 or end.weekday() >= 5 or not self.is_market_open(start) or not self.is_market_open(end):
+                    print(f"✓ {start} から {end} は休場日のためスキップします")
+                    continue
+                    
+                print(f"データ取得期間: {start} から {end}")
+                ticker = "^GSPC"
+                try:
+                    df = yf.download(ticker, start=start, end=end + relativedelta(days=1))
+                    if not df.empty:
+                        df_close = df[['Close']].copy()
+                        df_close.columns = ['SP500 Price']
+                        new_data.append(df_close)
+                    else:
+                        print(f"✓ {start} から {end} の期間にデータがないためスキップします")
+                except Exception as e:
+                    if "No price data found" in str(e):
+                        print(f"✓ {start} から {end} の期間は取引なしのためスキップします")
+                    else:
+                        print(f"✓ {start} から {end} の期間のデータ取得をスキップ: {str(e)}")
+            
+            if new_data:
+                new_df = pd.concat(new_data)
+                new_df.index.name = 'timestamp'
+                
+                # 既存のデータとマージ
+                if existing_df is not None:
+                    df = pd.concat([existing_df, new_df])
+                    df = df[~df.index.duplicated(keep='last')]
+                else:
+                    df = new_df
+                
+                df.sort_index(inplace=True)
+                df.to_csv(f'{self.base_path}/sp500.csv')
+                print("✓ S&P500データを保存しました")
+                return df
+            elif existing_df is not None:
+                print("✓ 新規データなし - 既存データを使用")
+                return existing_df
+            else:
+                print("✗ データが取得できませんでした")
+                return None
+        except Exception as e:
+            print(f"✗ S&P500データの取得に失敗: {str(e)}")
+            return existing_df if existing_df is not None else None
+
+    def get_gold_data(self):
+        """Yahoo Financeから金価格データを取得"""
+        print("\n金価格データの取得を開始...")
+        
+        # 既存のデータを読み込む
+        existing_df = self.load_existing_data('gold.csv')
+        if existing_df is not None:
+            print(f"既存データ: {len(existing_df)}行")
+            missing_ranges = self.get_missing_date_ranges(existing_df)
+        else:
+            missing_ranges = [(self.start_date, self.end_date)]
+        
+        try:
+            new_data = []
+            for start, end in missing_ranges:
+                # 日付範囲を1日単位で処理
+                current_date = start
+                while current_date <= end:
+                    # 土日または祝日をスキップ
+                    if current_date.weekday() >= 5 or not self.is_market_open(current_date):
+                        print(f"✓ {current_date.strftime('%Y-%m-%d')} は休場日のためスキップします")
+                        current_date += timedelta(days=1)
+                        continue
+                    
+                    next_date = current_date + timedelta(days=1)
+                    print(f"データ取得期間: {current_date.strftime('%Y-%m-%d')}")
+                    
+                    try:
+                        df = yf.download("GLD", start=current_date, end=next_date)
+                        if not df.empty:
+                            df_close = df[['Close']].copy()
+                            df_close.columns = ['Gold Price']
+                            new_data.append(df_close)
+                        else:
+                            print(f"✓ {current_date.strftime('%Y-%m-%d')} の期間にデータがないためスキップします")
+                    except Exception as e:
+                        if "No price data found" in str(e):
+                            print(f"✓ {current_date.strftime('%Y-%m-%d')} の期間は取引なしのためスキップします")
+                        else:
+                            print(f"✓ {current_date.strftime('%Y-%m-%d')} の期間のデータ取得をスキップ: {str(e)}")
+                    
+                    current_date = next_date
+            
+            if new_data:
+                new_df = pd.concat(new_data)
+                new_df.index.name = 'timestamp'
+                
+                # 既存のデータとマージ
+                if existing_df is not None:
+                    df = pd.concat([existing_df, new_df])
+                    df = df[~df.index.duplicated(keep='last')]
+                else:
+                    df = new_df
+                
+                df.sort_index(inplace=True)
+                df.to_csv(f'{self.base_path}/gold.csv')
+                print("✓ 金価格データを保存しました")
+                return df
+            elif existing_df is not None:
+                print("✓ 新規データなし - 既存データを使用")
+                return existing_df
+            else:
+                print("✗ データが取得できませんでした")
+                return None
+        except Exception as e:
+            print(f"✗ 金価格データの取得に失敗: {str(e)}")
+            return existing_df if existing_df is not None else None
+
+    def get_google_trends_data(self):
+        """Googleトレンドからビットコイン関連の検索トレンドを取得"""
+        print("\nGoogleトレンドデータの取得を開始...")
+        
+        # 既存のデータを読み込む
+        try:
+            filepath = os.path.join(self.base_path, 'google_trends.csv')
+            if os.path.exists(filepath):
+                existing_df = pd.read_csv(filepath)
+                existing_df['timestamp'] = pd.to_datetime(existing_df['date'])
+                existing_df.set_index('timestamp', inplace=True)
+                existing_df.drop('date', axis=1, errors='ignore', inplace=True)
+                print(f"既存データ: {len(existing_df)}行")
+                if existing_df.index[-1].date() >= self.end_date.date():
+                    print("✓ 新規データなし - 既存データを使用")
+                    return existing_df
+            else:
+                existing_df = None
+        except Exception as e:
+            print(f"既存データの読み込みをスキップ: {str(e)}")
+            existing_df = None
+        
+        try:
+            # 検索キーワードの設定
+            keywords = ['bitcoin', 'BTC', 'crypto']
+            self.pytrends.build_payload(
+                kw_list=keywords,
+                timeframe=f'{self.start_date.strftime("%Y-%m-%d")} {self.end_date.strftime("%Y-%m-%d")}'
+            )
+            
+            # データの取得
+            df = self.pytrends.interest_over_time()
+            if df.empty:
+                print("✗ トレンドデータが取得できませんでした")
+                return existing_df if existing_df is not None else None
+            
+            # 不要な列を削除
+            df = df.drop('isPartial', axis=1)
+            
+            # カラム名を変更
+            df.columns = [f'{col} Trend' for col in df.columns]
+            
+            # インデックス名を変更
+            df.index.name = 'timestamp'
+            
+            # 既存のデータとマージ
+            if existing_df is not None:
+                df = pd.concat([existing_df, df])
+                df = df[~df.index.duplicated(keep='last')]
+            
+            df.sort_index(inplace=True)
+            
+            # CSVに保存（dateカラムを追加）
+            df_to_save = df.copy()
+            df_to_save['date'] = df_to_save.index
+            df_to_save.to_csv(f'{self.base_path}/google_trends.csv', index=True)
+            print("✓ Googleトレンドデータを保存しました")
+            return df
+            
+        except Exception as e:
+            print(f"✗ Googleトレンドデータの取得に失敗: {str(e)}")
+            return existing_df if existing_df is not None else None
+
+    def get_etf_data(self):
+        """Yahoo FinanceからBitcoin ETFのデータを取得"""
+        print("\nBitcoin ETFデータの取得を開始...")
+        
+        # 既存のデータを読み込む
+        existing_df = self.load_existing_data('etf.csv')
+        if existing_df is not None:
+            print(f"既存データ: {len(existing_df)}行")
+            missing_ranges = self.get_missing_date_ranges(existing_df)
+        else:
+            missing_ranges = [(self.start_date, self.end_date)]
+        
+        try:
+            new_data = []
+            for start, end in missing_ranges:
+                # 日付範囲を1日単位で処理
+                current_date = start
+                while current_date <= end:
+                    # 土日または祝日をスキップ
+                    if current_date.weekday() >= 5 or not self.is_market_open(current_date):
+                        print(f"✓ {current_date.strftime('%Y-%m-%d')} は休場日のためスキップします")
+                        current_date += timedelta(days=1)
+                        continue
+                    
+                    next_date = current_date + timedelta(days=1)
+                    print(f"データ取得期間: {current_date.strftime('%Y-%m-%d')}")
+                    
+                    # 複数のBitcoin ETFのデータを取得
+                    etf_symbols = ['GBTC', 'BITO']
+                    daily_data = {}
+                    
+                    for symbol in etf_symbols:
+                        try:
+                            df = yf.download(symbol, start=current_date, end=next_date, progress=False)
+                            if not df.empty:
+                                # .item()を使用して明示的に数値を取得
+                                price = df['Close'].iloc[0].item()
+                                volume = df['Volume'].iloc[0].item()
+                                flow = price * volume
+                                
+                                # 大きな数値を適切に処理
+                                daily_data[f'{symbol} Price'] = price
+                                daily_data[f'{symbol} Volume'] = volume
+                                daily_data[f'{symbol} Flow'] = flow
+                                
+                                print(f"✓ {symbol}: Price=${price:,.2f}, Volume={volume:,.0f}, Flow=${flow:,.2f}")
+                            else:
+                                print(f"✓ {symbol}: {current_date.strftime('%Y-%m-%d')} の期間にデータがないためスキップします")
+                        except Exception as e:
+                            if "No price data found" in str(e):
+                                print(f"✓ {symbol}: {current_date.strftime('%Y-%m-%d')} の期間は取引なしのためスキップします")
+                            else:
+                                print(f"✓ {symbol}: {current_date.strftime('%Y-%m-%d')} の期間のデータ取得をスキップ: {str(e)}")
+                    
+                    if daily_data:
+                        daily_df = pd.DataFrame([daily_data], index=[current_date])
+                        new_data.append(daily_df)
+                    
+                    current_date = next_date
+            
+            if new_data:
+                new_df = pd.concat(new_data)
+                new_df.index.name = 'timestamp'
+                
+                # 既存のデータとマージ
+                if existing_df is not None:
+                    df = pd.concat([existing_df, new_df])
+                    df = df[~df.index.duplicated(keep='last')]
+                else:
+                    df = new_df
+                
+                # データ型を明示的に設定し、NaNを処理
+                for col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+                df.sort_index(inplace=True)
+                df.to_csv(f'{self.base_path}/etf.csv')
+                print("✓ Bitcoin ETFデータを保存しました")
+                return df
+            elif existing_df is not None:
+                print("✓ 新規データなし - 既存データを使用")
+                return existing_df
+            else:
+                print("✗ データが取得できませんでした")
+                return None
+        except Exception as e:
+            print(f"✗ Bitcoin ETFデータの取得に失敗: {str(e)}")
+            return existing_df if existing_df is not None else None
+
     def collect_all_data(self):
         """全てのデータを収集"""
         print("="*50)
@@ -447,7 +740,11 @@ class DataCollector:
         results = {
             'large_holders': self.get_large_holders_data(),
             'btcusd': self.get_btcusd_data(),
-            'dxy': self.get_dxy_data(),  # DXYデータを追加
+            'dxy': self.get_dxy_data(),
+            'sp500': self.get_sp500_data(),
+            'gold': self.get_gold_data(),
+            'etf': self.get_etf_data(),
+            'google_trends': self.get_google_trends_data(),
             'funding_rates': self.get_funding_rates(),
             'fear_greed': self.get_fear_greed_index(),
             'open_interest': self.get_open_interest(),
@@ -463,6 +760,11 @@ class DataCollector:
         print(f"データ収集完了: {success_count}/{total_count} 成功")
         print("="*50)
         return results if success_count > 0 else None
+
+    def is_market_open(self, date):
+        """指定された日付が取引日かどうかを確認"""
+        schedule = self.nyse.schedule(start_date=date, end_date=date)
+        return not schedule.empty
 
 def calculate_rsi(data, periods=14):
     """
@@ -587,43 +889,58 @@ def plot_market_data(results):
 
     # カラーパレットの設定
     colors = {
-        'large_holders': '#2ecc71',
-        'btcusd': '#f39c12',
-        'funding_rates': '#e74c3c',
-        'fear_greed': '#f1c40f',
-        'open_interest': '#9b59b6',
-        'trading_volume': '#3498db',
-        'active_addresses': '#1abc9c',
-        'hash_rate': '#e67e22',
-        'sma_21': '#3498db',   # 青
-        'sma_50': '#2ecc71',   # 緑
-        'sma_200': '#e74c3c',  # 赤
-        'ema_21': '#9b59b6',   # 紫
-        'ema_50': '#f1c40f',   # 黄
-        'ema_200': '#e67e22'   # オレンジ
+        'btcusd': '#f39c12',      # オレンジ（ビットコインの伝統的な色）
+        'large_holders': '#2ecc71', # 緑
+        'funding_rates': '#e74c3c', # 赤
+        'fear_greed': '#f1c40f',   # 黄色
+        'open_interest': '#9b59b6', # 紫
+        'trading_volume': '#3498db', # 青
+        'active_addresses': '#1abc9c', # ターコイズ
+        'hash_rate': '#e67e22',    # 濃いオレンジ
+        'dxy': '#3498db',          # 青（ドル関連）
+        'sp500': '#2ecc71',        # 緑（株式市場）
+        'gold': '#f1c40f',         # 金色
+        'correlation': '#e74c3c',   # 赤（相関係数）
+        'gbtc': '#8e44ad',         # 紫（ETF）
+        'bito': '#2980b9',         # 濃い青（ETF）
+        'sma_21': '#3498db',       # 青
+        'sma_50': '#2ecc71',       # 緑
+        'sma_200': '#e74c3c',      # 赤
+        'ema_21': '#9b59b6',       # 紫
+        'ema_50': '#f1c40f',       # 黄
+        'ema_200': '#e67e22',      # オレンジ
+        'macd': '#2ecc71',         # 緑
+        'signal': '#e74c3c',       # 赤
+        'google_trends': {
+            'bitcoin': '#3498db',   # 青
+            'BTC': '#2ecc71',      # 緑
+            'crypto': '#e74c3c'    # 赤
+        }
     }
 
     # メインの図を作成
     fig = plt.figure(figsize=(24, 16))
     
-    # グリッドを設定（3行3列）- BTCUSDは左上の大きなスペースを使用
-    gs = gridspec.GridSpec(3, 3, height_ratios=[1.5, 1, 1])
+    # グリッドを設定（4行3列）- BTCUSDは左上の大きなスペースを使用
+    gs = gridspec.GridSpec(4, 3, height_ratios=[1.5, 1, 1, 1])
 
     # BTCUSDとRSIとMACDのサブプロット領域を作成（3:1:1の比率）
     gs_btc = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs[0, 0], height_ratios=[3, 1, 1], hspace=0.1)
     
-    # 他のグラフ用のaxesリストを作成（BTCUSDの右側と下の行）
+    # 他のグラフ用のaxesリストを作成
     other_axes = []
     for i in range(1, 3):  # 上段の残り2つ
         other_axes.append(plt.subplot(gs[0, i]))
-    for i in range(3):     # 中段3つ
+    for i in range(3):     # 2段目3つ
         other_axes.append(plt.subplot(gs[1, i]))
-    for i in range(3):     # 下段3つ
+    for i in range(3):     # 3段目3つ
         other_axes.append(plt.subplot(gs[2, i]))
+    for i in range(3):     # 4段目3つ
+        other_axes.append(plt.subplot(gs[3, i]))
 
     # 指標の順序を定義（BTCUSDを除く）
-    indicator_order = ['dxy', 'large_holders', 'funding_rates', 'fear_greed', 'open_interest', 
-                      'trading_volume', 'active_addresses', 'hash_rate']
+    indicator_order = ['dxy', 'sp500', 'gold', 'etf', 'google_trends', 'large_holders', 'funding_rates', 
+                      'fear_greed', 'open_interest', 'trading_volume', 'active_addresses']
 
     # BTCUSDの描画
     if 'btcusd' in valid_results:
@@ -748,26 +1065,52 @@ def plot_market_data(results):
             df = valid_results[name]
             ax = other_axes[idx]
             
-            if name == 'dxy':
+            if name == 'google_trends':
+                # Googleトレンドの描画
+                for column in df.columns:
+                    keyword = column.split()[0]  # 'bitcoin Trend' から 'bitcoin' を取得
+                    color = colors['google_trends'].get(keyword.lower(), '#2c3e50')
+                    ax.plot(df.index, df[column],
+                           label=column,
+                           color=color,
+                           marker='o',
+                           markersize=2,
+                           linewidth=1.5,
+                           alpha=0.7)
+                
+                ax.set_title('Google Search Trends', pad=20, fontweight='bold')
+                ax.set_ylabel('Search Interest')
+                ax.grid(True, alpha=0.3)
+                ax.tick_params(axis='x', rotation=45)
+                ax.legend(loc='upper left')
+
+                # 最新の値をプロット上に表示
+                last_date = df.index[-1]
+                for i, column in enumerate(df.columns):
+                    last_value = df[column].iloc[-1]
+                    ax.annotate(f'{column}: {last_value:.0f}',
+                               xy=(last_date, last_value),
+                               xytext=(10, 10 + i*20),
+                               textcoords='offset points',
+                               va='bottom')
+
+            elif name == 'dxy':
                 # DXY価格の描画（左軸）
                 ax.plot(df.index, df['DXY Price'],
                        label='DXY',
-                       color='#3498db',
+                       color=colors['dxy'],
                        marker='o',
                        markersize=2,
                        linewidth=1.5,
                        alpha=0.7)
                 
-                # 相関係数の計算と描画（右軸）
+                # 相関係数の描画（右軸）
                 if 'btcusd' in valid_results:
                     ax2 = ax.twinx()
-                    btc_price = valid_results['btcusd']['BTCUSD Price']
-                    dxy_price = df['DXY Price']
-                    correlation = calculate_correlation(btc_price, dxy_price)
-                    
+                    correlation = calculate_correlation(valid_results['btcusd']['BTCUSD Price'], df['DXY Price'])
                     ax2.plot(correlation.index, correlation,
                             label='BTC-DXY Correlation (30D)',
-                            color='#e74c3c',
+                            color=colors['correlation'],
                             linewidth=1.5,
                             alpha=0.7)
                     
@@ -802,6 +1145,168 @@ def plot_market_data(results):
                                xytext=(10, -10),
                                textcoords='offset points',
                                va='top')
+
+            elif name == 'sp500':
+                # S&P500価格の描画（左軸）
+                ax.plot(df.index, df['SP500 Price'],
+                       label='S&P500',
+                       color=colors['sp500'],
+                       marker='o',
+                       markersize=2,
+                       linewidth=1.5,
+                       alpha=0.7)
+                
+                # 相関係数の描画（右軸）
+                if 'btcusd' in valid_results:
+                    ax2 = ax.twinx()
+                    correlation = calculate_correlation(valid_results['btcusd']['BTCUSD Price'], df['SP500 Price'])
+                    ax2.plot(correlation.index, correlation,
+                            label='BTC-SP500 Correlation (30D)',
+                            color=colors['correlation'],
+                            linewidth=1.5,
+                            alpha=0.7)
+                    
+                    # 相関軸の設定
+                    ax2.set_ylabel('Correlation')
+                    ax2.set_ylim(-1, 1)
+                    ax2.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
+                    
+                    # 凡例の結合
+                    lines1, labels1 = ax.get_legend_handles_labels()
+                    lines2, labels2 = ax2.get_legend_handles_labels()
+                    ax.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+                
+                ax.set_title('S&P500 & BTC Correlation', pad=20, fontweight='bold')
+                ax.set_ylabel('S&P500 Price')
+                ax.grid(True, alpha=0.3)
+                ax.tick_params(axis='x', rotation=45)
+
+                # 最新の値をプロット上に表示
+                last_sp500 = df['SP500 Price'].iloc[-1]
+                last_date = df.index[-1]
+                ax.annotate(f'S&P500: {last_sp500:.2f}',
+                           xy=(last_date, last_sp500),
+                           xytext=(10, 10),
+                           textcoords='offset points',
+                           va='bottom')
+                
+                if 'btcusd' in valid_results and correlation is not None:
+                    last_corr = correlation.iloc[-1]
+                    ax2.annotate(f'Corr: {last_corr:.2f}',
+                               xy=(last_date, last_corr),
+                               xytext=(10, -10),
+                               textcoords='offset points',
+                               va='top')
+
+            elif name == 'gold':
+                # 金価格の描画（左軸）
+                ax.plot(df.index, df['Gold Price'],
+                       label='Gold',
+                       color=colors['gold'],
+                       marker='o',
+                       markersize=2,
+                       linewidth=1.5,
+                       alpha=0.7)
+                
+                # 相関係数の描画（右軸）
+                if 'btcusd' in valid_results:
+                    ax2 = ax.twinx()
+                    correlation = calculate_correlation(valid_results['btcusd']['BTCUSD Price'], df['Gold Price'])
+                    ax2.plot(correlation.index, correlation,
+                            label='BTC-Gold Correlation (30D)',
+                            color=colors['correlation'],
+                            linewidth=1.5,
+                            alpha=0.7)
+                    
+                    # 相関軸の設定
+                    ax2.set_ylabel('Correlation')
+                    ax2.set_ylim(-1, 1)
+                    ax2.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
+                    
+                    # 凡例の結合
+                    lines1, labels1 = ax.get_legend_handles_labels()
+                    lines2, labels2 = ax2.get_legend_handles_labels()
+                    ax.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+                
+                ax.set_title('Gold & BTC Correlation', pad=20, fontweight='bold')
+                ax.set_ylabel('Gold Price (USD)')
+                ax.grid(True, alpha=0.3)
+                ax.tick_params(axis='x', rotation=45)
+
+                # 最新の値をプロット上に表示
+                last_gold = df['Gold Price'].iloc[-1]
+                last_date = df.index[-1]
+                ax.annotate(f'Gold: {last_gold:.2f}',
+                           xy=(last_date, last_gold),
+                           xytext=(10, 10),
+                           textcoords='offset points',
+                           va='bottom')
+                
+                if 'btcusd' in valid_results and correlation is not None:
+                    last_corr = correlation.iloc[-1]
+                    ax2.annotate(f'Corr: {last_corr:.2f}',
+                               xy=(last_date, last_corr),
+                               xytext=(10, -10),
+                               textcoords='offset points',
+                               va='top')
+
+            elif name == 'etf':
+                # ETFデータの描画
+                # 価格の描画（左軸）
+                for symbol in ['GBTC', 'BITO']:
+                    if f'{symbol} Price' in df.columns:
+                        ax.plot(df.index, df[f'{symbol} Price'],
+                               label=f'{symbol} Price',
+                               color=colors[symbol.lower()],
+                               marker='o',
+                               markersize=2,
+                               linewidth=1.5,
+                               alpha=0.7)
+                
+                # 資金流入の描画（右軸）
+                ax2 = ax.twinx()
+                for symbol in ['GBTC', 'BITO']:
+                    if f'{symbol} Flow' in df.columns:
+                        flow_data = df[f'{symbol} Flow'].rolling(window=7).mean()
+                        ax2.plot(df.index, flow_data,
+                                label=f'{symbol} Flow (7D MA)',
+                                color=colors[symbol.lower()],
+                                linestyle='--',
+                                linewidth=1.5,
+                                alpha=0.5)
+                
+                # グラフの装飾
+                ax.set_title('Bitcoin ETF Prices & Flows', pad=20, fontweight='bold')
+                ax.set_ylabel('Price (USD)')
+                ax2.set_ylabel('Flow (USD)')
+                ax.grid(True, alpha=0.3)
+                ax.tick_params(axis='x', rotation=45)
+                
+                # 凡例の結合
+                lines1, labels1 = ax.get_legend_handles_labels()
+                lines2, labels2 = ax2.get_legend_handles_labels()
+                ax.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+                
+                # 最新の値をプロット上に表示
+                last_date = df.index[-1]
+                y_offset = 0
+                for symbol in ['GBTC', 'BITO']:
+                    if f'{symbol} Price' in df.columns:
+                        last_price = df[f'{symbol} Price'].iloc[-1]
+                        last_flow = df[f'{symbol} Flow'].iloc[-1]
+                        ax.annotate(f'{symbol} Price: ${last_price:,.2f}',
+                                   xy=(last_date, last_price),
+                                   xytext=(10, y_offset),
+                                   textcoords='offset points',
+                                   va='bottom')
+                        y_offset += 20
+                        ax2.annotate(f'{symbol} Flow: ${last_flow:,.0f}',
+                                   xy=(last_date, last_flow),
+                                   xytext=(10, y_offset),
+                                   textcoords='offset points',
+                                   va='bottom')
+                        y_offset += 20
+
             else:
                 # 他の指標の描画
                 if len(df.columns) > 1:
