@@ -159,10 +159,8 @@ class MarketPlotter(BasePlotter):
         ax_rsi = plt.subplot(gs_btc[1])
         rsi = self.tech_indicators.calculate_rsi(btcusd_data['BTCUSD Price'])
         ax_rsi.plot(rsi.index, rsi, color=self.colors['btcusd'])
-        ax_rsi.axhline(y=70, color='red', linestyle='--', alpha=0.5)
-        ax_rsi.axhline(y=30, color='green', linestyle='--', alpha=0.5)
+        self.format_axis(ax_rsi, 'RSI (14)', ylabel='RSI', show_borders=True, borders=[30, 70])
         ax_rsi.set_ylim(0, 100)
-        self.format_axis(ax_rsi, 'RSI (14)', ylabel='RSI')
         
         # MACDのプロット
         ax_macd = plt.subplot(gs_btc[2])
@@ -170,8 +168,33 @@ class MarketPlotter(BasePlotter):
         ax_macd.plot(macd_line.index, macd_line, color=self.colors['macd'], label='MACD')
         ax_macd.plot(signal_line.index, signal_line, color=self.colors['signal'], label='Signal')
         ax_macd.bar(histogram.index, histogram, color=self.colors['btcusd'], alpha=0.3)
-        self.format_axis(ax_macd, 'MACD', ylabel='MACD')
+        
+        # MACDのボーダーライン（0を基準）
+        self.format_axis(ax_macd, 'MACD', ylabel='MACD', show_borders=True, borders=[-0, 0])
         ax_macd.legend(loc='upper left')
+
+    def add_btc_reference_line(self, ax, btc_price):
+        """BTCUSDの参照線を追加
+        
+        Args:
+            ax: プロット対象のAxes
+            btc_price (pd.Series): BTCUSDの価格データ
+        """
+        # 現在のY軸の範囲を取得
+        y_min, y_max = ax.get_ylim()
+        y_range = y_max - y_min
+        
+        # BTCUSDデータを0-1の範囲に正規化
+        btc_normalized = (btc_price - btc_price.min()) / (btc_price.max() - btc_price.min())
+        
+        # 正規化したデータを現在のY軸の中央40%の範囲にスケーリング
+        y_center = (y_max + y_min) / 2
+        y_scale = y_range * 0.4
+        btc_scaled = y_center + (btc_normalized - 0.5) * y_scale
+        
+        # 点線でプロット
+        ax.plot(btc_price.index, btc_scaled, color=self.colors['btcusd'], 
+                linestyle='--', alpha=0.3, zorder=1)
 
     def plot_other_data(self, axes, data):
         """その他のデータをプロット
@@ -181,17 +204,19 @@ class MarketPlotter(BasePlotter):
             data (dict): プロットするデータの辞書
         """
         ax_index = 0
+        btc_price = None if 'btcusd' not in data else data['btcusd']['BTCUSD Price']
         
         # 相関プロット
-        if 'btcusd' in data:
-            btc_price = data['btcusd']['BTCUSD Price']
-            
+        if btc_price is not None:
             # DXYとの相関
             if 'dxy' in data and ax_index < len(axes):
                 correlation = self.corr_plotter.calculate_correlation(
                     btc_price, data['dxy']['DXY Price'])
                 self.corr_plotter.plot_correlation(
                     axes[ax_index], correlation, 'BTC-DXY Correlation', 'BTC', 'DXY')
+                self.add_btc_reference_line(axes[ax_index], btc_price)
+                self.format_axis(axes[ax_index], 'BTC-DXY Correlation', ylabel='Correlation',
+                               show_borders=True, borders=[-0.5, 0.5])
                 ax_index += 1
             
             # S&P500との相関
@@ -200,28 +225,39 @@ class MarketPlotter(BasePlotter):
                     btc_price, data['sp500']['SP500 Price'])
                 self.corr_plotter.plot_correlation(
                     axes[ax_index], correlation, 'BTC-S&P500 Correlation', 'BTC', 'S&P500')
+                self.add_btc_reference_line(axes[ax_index], btc_price)
+                self.format_axis(axes[ax_index], 'BTC-S&P500 Correlation', ylabel='Correlation',
+                               show_borders=True, borders=[-0.5, 0.5])
                 ax_index += 1
         
         # その他のデータプロット
         plot_configs = [
-            ('large_holders', 'Total Holdings', 'Large Holders'),
-            ('funding_rates', 'Funding Rate', 'Funding Rates (%)'),
-            ('fear_greed', 'Fear & Greed Value', 'Fear & Greed Index'),
-            ('open_interest', 'Open Interest', 'Open Interest (BTC)'),
-            ('trading_volume', 'Trading Volume', 'Volume (USD)'),
-            ('active_addresses', 'Active Addresses', 'Number of Addresses'),
-            ('hash_rate', 'Hash Rate', 'Hash Rate (TH/s)'),
-            ('coinbase_premium', 'Coinbase Premium', 'Premium (%)'),
-            ('etf', 'GBTC Price', 'GBTC Price (USD)')
+            ('large_holders', 'Total Holdings', 'Large Holders', None),
+            ('funding_rates', 'Funding Rate', 'Funding Rates (%)', [-0.05, 0.05]),
+            ('fear_greed', 'Fear & Greed Value', 'Fear & Greed Index', [25, 75]),
+            ('open_interest', 'Open Interest', 'Open Interest (BTC)', None),
+            ('trading_volume', 'Trading Volume', 'Volume (USD)', None),
+            ('active_addresses', 'Active Addresses', 'Number of Addresses', None),
+            ('hash_rate', 'Hash Rate', 'Hash Rate (TH/s)', None),
+            ('coinbase_premium', 'Coinbase Premium', 'Premium (%)', [-0.05, 0.05]),
+            ('etf', 'GBTC Price', 'GBTC Price (USD)', None)
         ]
 
-        for name, column, title in plot_configs:
+        for name, column, title, borders in plot_configs:
             if name in data and ax_index < len(axes):
                 df = data[name]
                 if column in df.columns:
+                    # メインデータのプロット
                     axes[ax_index].plot(df.index, df[column],
-                                      color=self.colors.get(name, '#333333'))
-                    self.format_axis(axes[ax_index], title)
+                                      color=self.colors.get(name, '#333333'),
+                                      zorder=2)  # メインデータを前面に表示
+                    
+                    # BTCUSDの参照線を追加（RSIとMACD以外）
+                    if btc_price is not None:
+                        self.add_btc_reference_line(axes[ax_index], btc_price)
+                    
+                    # ボーダーラインの追加
+                    self.format_axis(axes[ax_index], title, show_borders=bool(borders), borders=borders)
                     
                     # 特別な設定
                     if name == 'fear_greed':
@@ -229,5 +265,5 @@ class MarketPlotter(BasePlotter):
                     elif name == 'open_interest':
                         axes[ax_index].yaxis.set_major_formatter(
                             plt.FuncFormatter(lambda x, p: format(int(x), ',')))
-                    
+  
                 ax_index += 1 

@@ -79,13 +79,27 @@ class BasePlotter:
         
         return fig, gs, gs_btc, other_axes
 
-    def format_axis(self, ax, title, ylabel=None):
-        """軸のフォーマットを設定"""
+    def format_axis(self, ax, title, ylabel=None, show_borders=False, borders=None):
+        """軸のフォーマットを設定
+        
+        Args:
+            ax: プロット対象のAxes
+            title: グラフのタイトル
+            ylabel: Y軸のラベル
+            show_borders: ボーダーラインを表示するかどうか
+            borders: ボーダーラインの値のリスト [下限, 上限]
+        """
         ax.set_title(title)
         if ylabel:
             ax.set_ylabel(ylabel)
         ax.tick_params(axis='x', rotation=45)
         ax.grid(True, alpha=0.3)
+        
+        # ボーダーラインの追加
+        if show_borders and borders:
+            lower, upper = borders
+            ax.axhline(y=lower, color='green', linestyle='--', alpha=0.5)
+            ax.axhline(y=upper, color='red', linestyle='--', alpha=0.5)
 
     def add_signal_background(self, ax, signal_data):
         """シグナル強度に応じた背景色を追加
