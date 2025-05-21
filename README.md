@@ -78,7 +78,7 @@ cd bitcoin-market-analyzer
 2. 仮想環境の作成と有効化:
 ```bash
 python -m venv venv
-source venv/bin/activate  # Unix/macOS
+source .venv/bin/activate  # Unix/macOS
 # または
 .\venv\Scripts\activate  # Windows
 ```
