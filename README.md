@@ -99,6 +99,58 @@ python crypto_analysis.py
 - 各指標のCSVファイルが `market_data/` ディレクトリに保存されます
 - グラフは `crypto_analysis.png` として保存されます
 
+## Dockerでの実行
+
+Docker 環境での実行方法です。ローカルに Python を用意せずに動かせますわ🌙
+
+1. 画像のビルド:
+```bash
+docker compose build
+```
+
+2. 実行（単発ジョブ）:
+```bash
+docker compose run --rm analyzer
+```
+
+3. 出力:
+- `market_data/` に各種 CSV が保存されます（ホストにマウントされます）
+- `crypto_analysis.png` がプロジェクト直下に保存されます
+
+補足:
+- ヘッドレス描画のため `MPLBACKEND=Agg` を使用しています
+- ネットワーク経由で外部 API にアクセスしますので、環境のネットワーク制限にご注意ください
+
+## 定期実行（cron）
+
+このリポジトリには、毎日自動で実行するためのセットアップスクリプトを用意していますわ。
+
+1. セットアップ（毎日 06:00 実行）
+```bash
+chmod +x ./setup.sh
+./setup.sh
+```
+
+2. 実行時間を変更（例: 毎日 03:30）
+```bash
+SCHEDULE="30 3 * * *" ./setup.sh
+```
+
+3. 手動テスト（cron と同じ処理を即時実行）
+```bash
+./scripts/run_daily.sh
+```
+
+4. ログ
+- 実行ログは `logs/cron.log` に追記されます
+
+5. macOS で crontab 登録に失敗する場合（Operation not permitted）
+- 設定 > プライバシーとセキュリティ > フルディスクアクセス にて `Terminal` と `/usr/sbin/cron` を追加し、再度 `./setup.sh` を実行
+- あるいは root の crontab に登録します:
+```bash
+sudo SCHEDULE="0 6 * * *" ./setup.sh
+```
+
 ## データ更新
 
 - スクリプトは既存のCSVファイルをチェックし、必要な期間のデータのみを取得します
