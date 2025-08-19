@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  analyzer:
+    build: .
+    image: bitcoin-market-analyzer:latest
+    container_name: bitcoin-market-analyzer
+    environment:
+      - MPLBACKEND=Agg
+    volumes:
+      - ./market_data:/app/market_data
+      - ./:/app
+    working_dir: /app
+    command: ["python", "crypto_analysis.py"]
